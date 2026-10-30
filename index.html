@@ -35,7 +35,7 @@ input{width:100%;box-sizing:border-box;padding:12px;font-size:17px;border:1px so
 </head>
 <body>
 <main id="app"></main>
-<script src="config.js?v=2"></script>
+<script src="./config.js?v=3" onerror="window.FIREBASE_CONFIG_LOAD_ERROR=true"></script>
 <script type="module">
 import{initializeApp}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import{getAuth,signInAnonymously}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
@@ -83,7 +83,16 @@ function stage(){const r=S.room;if(!r||!r.started)return"lobby";const t=now();re
 
 async function boot(){
  const cfg=window.FIREBASE_CONFIG;
- if(!cfg||!cfg.apiKey||/YOUR_/.test(cfg.apiKey)){app.innerHTML='<h1>尚未設定 Firebase</h1><div class="card"><p class="sub">請編輯 config.js，貼上你的 firebaseConfig。</p></div>';return}
+ if(window.FIREBASE_CONFIG_LOAD_ERROR){
+  app.innerHTML='<h1>Firebase 設定檔載入失敗</h1><div class="card"><p class="sub">找不到 config.js 或瀏覽器無法載入此檔案。請確認 config.js 位於 index.html 同一個發布目錄，且檔名大小寫正確。</p></div>';
+  return;
+ }
+ const required=["apiKey","authDomain","databaseURL","projectId","storageBucket","messagingSenderId","appId"];
+ const missing=required.filter(k=>!cfg||typeof cfg[k]!=="string"||!cfg[k].trim()||/^YOUR_/i.test(cfg[k]));
+ if(missing.length){
+  app.innerHTML='<h1>Firebase 設定尚未完成</h1><div class="card"><p class="sub">config.js 已載入，但以下欄位缺少或仍是範例值：'+missing.map(esc).join("、")+'。請確認 Firebase Console 提供的 firebaseConfig。</p></div>';
+  return;
+ }
  try{const a=initializeApp(cfg);db=getDatabase(a);uid=(await signInAnonymously(getAuth(a))).user.uid;
   on(onValue(ref(db,".info/serverTimeOffset"),s=>off0=s.val()||0));
   const c=localStorage.getItem("ww2_room");c?enter(c):home()}
