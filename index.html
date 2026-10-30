@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>線上狼人殺</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--bg:#f4f1ea;--card:#fff;--tx:#1d1b18;--sub:#6b665e;--ac:#b3261e;--bd:#ddd6c8;--good:#1f7a4d;--wolf:#b3261e;--god:#2b5fb8}
+@media (prefers-color-scheme:dark){:root{color-scheme:dark;--bg:#14161a;--card:#1f2228;--tx:#eceae6;--sub:#9a968f;--ac:#e5534b;--bd:#33373f;--good:#4cc38a;--wolf:#ff6b63;--god:#6ea1ff}}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--tx);font-family:-apple-system,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;display:flex;justify-content:center}
+main{width:100%;max-width:480px;padding:20px 16px 32px;box-sizing:border-box;display:flex;flex-direction:column;gap:14px}
+h1{font-size:24px;margin:8px 0 0;text-align:center}
+.sub{color:var(--sub);text-align:center;font-size:14px;margin:0}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:18px}
+button{font:inherit;border:0;border-radius:12px;padding:14px;background:var(--ac);color:#fff;font-weight:700;font-size:17px;cursor:pointer;width:100%}
+button.ghost{background:transparent;color:var(--tx);border:1px solid var(--bd)}
+button:active{transform:scale(.98)}button:disabled{opacity:.4}
+button.armed{background:var(--good);color:#fff;border-color:transparent}
+button.sm{width:42px;padding:6px;font-size:20px}button.snd{width:80px}
+input{width:100%;box-sizing:border-box;padding:12px;font-size:17px;border:1px solid var(--bd);border-radius:12px;background:var(--bg);color:var(--tx)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.chip{padding:6px 12px;border-radius:999px;border:1px solid var(--bd);font-size:14px}
+.big{text-align:center;padding:30px 18px}.big .num{font-size:72px;font-weight:800;line-height:1}
+.role{font-size:52px;font-weight:800;margin:6px 0}
+.camp{display:inline-block;padding:4px 14px;border-radius:999px;font-size:14px;font-weight:700;color:#fff}
+.wolf{color:var(--wolf)}.god{color:var(--god)}.vil{color:var(--good)}
+.bg-wolf{background:var(--wolf)}.bg-god{background:var(--god)}.bg-vil{background:var(--good)}
+.desc{color:var(--sub);margin:14px 0 4px;line-height:1.6}
+.row,.rowb{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--bd)}
+.row:last-child{border:0}.rowb{padding-top:0}.hide{display:none}
+.cm{height:200px;overflow:auto;margin:8px 0;font-size:15px}.cm p{margin:4px 0}
+</style>
+</head>
+<body>
+<main id="app"></main>
+<script src="config.js"></script>
+<script type="module">
+import{initializeApp}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+import{getAuth,signInAnonymously}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+import{getDatabase,ref,get,set,update,remove,push,onValue,onChildAdded}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js";
+const $=id=>document.getElementById(id),app=$("app");
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const INFO={
+"狼人":["wolf","每晚與同伴討論並殺死一名玩家。白天隱藏身分，誤導好人。"],
+"狼王":["wolf","狼人陣營。被票出局或夜晚被殺時，可開槍帶走一名玩家（被毒除外）。"],
+"白狼王":["wolf","狼人陣營。白天發言時可自爆並帶走一名玩家。"],
+"預言家":["god","每晚可查驗一名玩家是好人或狼人。"],
+"女巫":["god","擁有一瓶解藥與一瓶毒藥，各用一次，同夜不可同時使用。"],
+"獵人":["god","被票出局或夜晚被殺時可開槍帶走一人（被毒除外）。"],
+"守衛":["god","每晚守護一名玩家使其免於狼刀，不可連續兩晚守同一人。"],
+"白痴":["god","被票出局時可翻牌免死，但之後失去投票權。"],
+"騎士":["god","白天可翻牌決鬥一名玩家：對方是狼則其出局，否則騎士出局。"],
+"守墓人":["god","每晚得知前一天被投票出局者是好人或狼人。"],
+"村民":["vil","沒有特殊能力，靠發言與投票找出狼人。"]};
+const GODS=["預言家","女巫","獵人","守衛","白痴","騎士","守墓人"],ALL=["狼人","狼王","白狼王",...GODS,"村民"];
+let db,uid,off0=0,unsub=[],gun=[];
+let S={code:null,room:null,roles:null,myRole:null,wolf:null,chat:[],isWolf:false,wl:0,custom:null,cn:0,adv:false,hide:false,show:false,stage:""};
+const now=()=>Date.now()+off0,isHost=()=>S.room&&S.room.host===uid;
+const pl=()=>Object.entries(S.room.players||{}).sort((a,b)=>a[1].j-b[1].j);
+const rnd=k=>{const a=new Uint32Array(1);crypto.getRandomValues(a);return a[0]%k};
+const shuffle=a=>{for(let i=a.length-1;i>0;i--){const j=rnd(i+1);[a[i],a[j]]=[a[j],a[i]]}return a};
+function defList(n){const w=Math.floor(n/3),g=3+Math.floor((n-7)/3),v=n-w-g,l=[];
+ for(let i=0;i<w;i++)l.push(i==0&&w>=4?"狼王":i==1&&w>=6?"白狼王":"狼人");
+ l.push(...GODS.slice(0,g));for(let i=0;i<v;i++)l.push("村民");return l}
+function defCounts(n){const c={};defList(n).forEach(r=>c[r]=(c[r]||0)+1);return c}
+function build(n){const c=S.custom||defCounts(n),l=[];ALL.forEach(r=>{for(let i=0;i<(c[r]||0);i++)l.push(r)});return l}
+function deal(ids){const n=ids.length;let h=[];try{h=JSON.parse(localStorage.getItem("ww2_h"))||[]}catch(e){}
+ const base=build(n);let best=null,bs=1e9;
+ for(let t=0;t<3000;t++){const l=shuffle(base.slice());
+  const s=h.length>1?ids.filter((u,i)=>h[0][u]&&h[0][u]==l[i]&&h[1][u]==l[i]).length:0;
+  if(s<bs){bs=s;best=l}if(!s)break}
+ try{localStorage.setItem("ww2_h",JSON.stringify([Object.fromEntries(ids.map((u,i)=>[u,best[i]])),...h].slice(0,2)))}catch(e){}
+ return best}
+function chips(list){const m={};list.forEach(r=>m[r]=(m[r]||0)+1);
+ return'<div class="chips">'+Object.entries(m).sort((a,b)=>"wolf god vil".indexOf(INFO[a[0]][0])-"wolf god vil".indexOf(INFO[b[0]][0])).map(([r,c])=>`<span class="chip ${INFO[r][0]}">${r} × ${c}</span>`).join("")+"</div>"}
+function dbl(b,fn){const t=b.textContent;let on=false,tm;b.onclick=()=>{if(on){clearTimeout(tm);fn()}else{on=true;b.textContent="再點一次確認";b.classList.add("armed");tm=setTimeout(()=>{on=false;b.textContent=t;b.classList.remove("armed")},2500)}}}
+const on=q=>{unsub.push(q)},g=q=>{gun.push(q)};
+function unsubAll(){unsub.forEach(f=>f());unsub=[];stopGame()}
+function stopGame(){gun.forEach(f=>f());gun=[];Object.assign(S,{roles:null,myRole:null,wolf:null,chat:[],isWolf:false,wl:0,show:false,hide:false})}
+function stage(){const r=S.room;if(!r||!r.started)return"lobby";const t=now();return t<r.revealAt?"count":t<r.chatEnd?"chat":"after"}
+
+async function boot(){
+ const cfg=window.FIREBASE_CONFIG;
+ if(!cfg||!cfg.apiKey||/YOUR_/.test(cfg.apiKey)){app.innerHTML='<h1>尚未設定 Firebase</h1><div class="card"><p class="sub">請編輯 config.js，貼上你的 firebaseConfig。</p></div>';return}
+ try{const a=initializeApp(cfg);db=getDatabase(a);uid=(await signInAnonymously(getAuth(a))).user.uid;
+  on(onValue(ref(db,".info/serverTimeOffset"),s=>off0=s.val()||0));
+  const c=localStorage.getItem("ww2_room");c?enter(c):home()}
+ catch(e){app.innerHTML=`<h1>連線失敗</h1><div class="card"><p class="sub">${esc(e.message)}</p></div>`}}
+function home(msg){unsubAll();S.code=null;S.room=null;S.custom=null;S.adv=false;S.stage="";
+ app.innerHTML=`<h1>🐺 線上狼人殺</h1><p class="sub">${msg||"創建或加入房間"}</p>
+ <div class="card"><input id="nm" placeholder="你的暱稱" maxlength="8" value="${esc(localStorage.getItem("ww2_n")||"")}"></div>
+ <button id="mk">創建房間（我是主持人）</button>
+ <div class="card"><input id="cd" placeholder="房間代碼" inputmode="numeric" maxlength="5"><button id="jn" style="margin-top:12px">加入房間</button></div>`;
+ $("mk").onclick=create;$("jn").onclick=join}
+function nick(){const v=$("nm").value.trim();if(!v){alert("請先輸入暱稱");return""}localStorage.setItem("ww2_n",v);return v}
+async function create(){const name=nick();if(!name)return;
+ try{let c;for(let i=0;i<5;i++){c=String(10000+rnd(90000));if(!(await get(ref(db,"rooms/"+c))).exists())break}
+  await set(ref(db,"rooms/"+c),{host:uid,created:now()});enter(c)}catch(e){alert("建立失敗："+e.message)}}
+async function join(){const name=nick();if(!name)return;const c=$("cd").value.trim();
+ try{const s=await get(ref(db,"rooms/"+c)),r=s.val();
+  if(!r)return alert("房間不存在");
+  const p=r.players||{};
+  if(!p[uid]){if(r.started)return alert("遊戲已開始，無法加入");if(Object.keys(p).length>=20)return alert("房間已滿（上限 20 人）")}
+  await set(ref(db,`rooms/${c}/players/${uid}`),{n:name,j:p[uid]?p[uid].j:now()});enter(c)}catch(e){alert("加入失敗："+e.message)}}
+function enter(c){unsubAll();S.code=c;localStorage.setItem("ww2_room",c);
+ on(onValue(ref(db,"rooms/"+c),s=>{const r=s.val();
+  if(!r){localStorage.removeItem("ww2_room");return home("房間已關閉")}
+  const was=S.room&&S.room.started;S.room=r;
+  if(r.started&&!was)startListen();if(!r.started&&was)stopGame();
+  render()}))}
+function startListen(){stopGame();const c=S.code;
+ if(isHost()){g(onValue(ref(db,"roles/"+c),s=>{S.roles=s.val();render()}));listenWolf()}
+ else{g(onValue(ref(db,`roles/${c}/${uid}`),s=>{S.myRole=s.val();render()}));
+  g(onValue(ref(db,`wolf/${c}/${uid}`),s=>{S.isWolf=s.exists();if(S.isWolf)listenWolf();render()}))}}
+function listenWolf(){if(S.wl)return;S.wl=1;const c=S.code;
+ g(onValue(ref(db,"wolf/"+c),s=>{S.wolf=s.val();render()}));
+ g(onChildAdded(ref(db,"chat/"+c),s=>{S.chat.push(s.val());drawChat()}))}
+async function exit(){const c=S.code,h=isHost(),st=S.room&&S.room.started;unsubAll();localStorage.removeItem("ww2_room");
+ try{if(h)await update(ref(db),{["rooms/"+c]:null,["roles/"+c]:null,["wolf/"+c]:null,["chat/"+c]:null});
+  else if(!st)await remove(ref(db,`rooms/${c}/players/${uid}`))}catch(e){}
+ home()}
+
+function render(){if(!S.room)return;const kv=$("ci")?$("ci").value:"",st=stage();S.stage=st;
+ if(isHost())st=="lobby"?hostLobby():hostGame();else st=="lobby"?playerLobby():playerGame(st);
+ if($("ci"))$("ci").value=kv}
+function advPanel(n){const c=S.custom,t=build(n).length;
+ return`<div class="card"><p class="sub" style="margin-bottom:6px">合計 <b class="${t==n?"vil":"wolf"}">${t}</b> / ${n} 人</p>`+ALL.map(r=>`<div class="row"><b class="${INFO[r][0]}">${r}</b><span style="display:flex;align-items:center;gap:12px"><button class="ghost sm" data-r="${r}" data-d="-1">−</button><b style="min-width:20px;text-align:center">${c[r]||0}</b><button class="ghost sm" data-r="${r}" data-d="1">+</button></span></div>`).join("")+`<button class="ghost" id="rs" style="margin-top:12px">重設為預設配置</button></div>`}
+function hostLobby(){const p=pl(),n=p.length;
+ if(S.custom&&S.cn!=n){S.custom["村民"]=Math.max(0,(S.custom["村民"]||0)+n-S.cn);S.cn=n}
+ const b=n>=7?build(n):[],ok=n>=7&&n<=20&&b.length==n;
+ app.innerHTML=`<h1>🎙️ 主持人</h1><div class="card big"><p class="sub">房間代碼</p><div class="num">${S.code}</div><p class="sub">請玩家輸入此代碼加入</p></div>
+ <div class="card"><b>玩家 ${n} / 20</b><div class="chips">${p.map(([u,v],i)=>`<span class="chip">${i+1} ${esc(v.n)}</span>`).join("")}</div></div>
+ ${n>=7?`<div class="card"><p class="sub">本局配置</p>${chips(b)}</div><button class="ghost" id="advb">${S.adv?"收起進階設定":"進階設定：自訂職業數量"}</button>${S.adv?advPanel(n):""}`:`<p class="sub">至少需要 7 位玩家</p>`}
+ <button id="go" ${ok?"":"disabled"}>${ok?"開始發牌":n<7?"人數不足":"職業數量與人數不符"}</button><button class="ghost" id="lv">關閉房間</button>`;
+ $("lv").onclick=exit;$("go").onclick=start;
+ const a=$("advb");if(a)a.onclick=()=>{S.adv=!S.adv;if(S.adv&&!S.custom){S.custom=defCounts(n);S.cn=n}render()};
+ document.querySelectorAll("[data-r]").forEach(x=>x.onclick=()=>{const k=x.dataset.r;S.custom[k]=Math.max(0,Math.min(n,(S.custom[k]||0)+Number(x.dataset.d)));render()});
+ const rs=$("rs");if(rs)rs.onclick=()=>{S.custom=defCounts(n);S.cn=n;render()}}
+async function start(){const c=S.code,p=pl(),ids=p.map(x=>x[0]),roles=deal(ids),rv=now()+3500,u={};
+ u["rooms/"+c+"/revealAt"]=rv;u["rooms/"+c+"/chatEnd"]=rv+30000;u["rooms/"+c+"/started"]=true;
+ ids.forEach((id,i)=>{u[`roles/${c}/${id}`]=roles[i];if(INFO[roles[i]][0]=="wolf")u[`wolf/${c}/${id}`]=i+1});
+ try{await update(ref(db),u)}catch(e){alert("開始失敗："+e.message)}}
+async function again(){const c=S.code;
+ await update(ref(db),{["roles/"+c]:null,["wolf/"+c]:null,["chat/"+c]:null,[`rooms/${c}/started`]:null,[`rooms/${c}/revealAt`]:null,[`rooms/${c}/chatEnd`]:null})}
+function hostGame(){const p=pl(),R=S.roles||{};
+ app.innerHTML=`<h1>🎙️ 主持人區</h1><div class="card"><b>房間 ${S.code}</b>　${p.length} 人${chips(p.map(([u])=>R[u]).filter(Boolean))}</div>
+ <button id="tg" class="${S.show?"ghost":""}">${S.show?"隱藏所有身分":"顯示所有身分"}</button>
+ <div class="card ${S.show?"":"hide"}">${p.map(([u,v],i)=>`<div class="row"><span>${i+1} ${esc(v.n)}</span><b class="${INFO[R[u]||"村民"][0]}">${R[u]||"…"}</b></div>`).join("")}</div>
+ <div class="card"><div class="rowb"><b>🐺 狼人頻道（只讀）</b><span id="ct" class="wolf"></span></div><div class="cm" id="cm"></div></div>
+ <button class="ghost" id="rp">再玩一局</button><button class="ghost" id="lv">關閉房間</button>`;
+ dbl($("tg"),()=>{S.show=!S.show;render()});dbl($("rp"),again);dbl($("lv"),exit);drawChat()}
+function playerLobby(){const p=pl();
+ app.innerHTML=`<h1>🚪 已加入房間</h1><div class="card big"><p class="sub">房間代碼</p><div class="num">${S.code}</div></div>
+ <div class="card"><b>玩家 ${p.length}</b><div class="chips">${p.map(([u,v],i)=>`<span class="chip ${u==uid?"vil":""}">${i+1} ${esc(v.n)}</span>`).join("")}</div></div>
+ <p class="sub">等待主持人開始…</p><button class="ghost" id="lv">離開房間</button>`;$("lv").onclick=exit}
+function playerGame(st){
+ if(st=="count"){app.innerHTML=`<div class="card big"><p class="sub">身分將在</p><div class="num" id="cnt">3</div><p class="sub">秒後揭曉，請確認只有你看得到螢幕</p></div>`;return}
+ const r=S.myRole;if(!r){app.innerHTML='<p class="sub">讀取身分中…</p>';return}
+ const[c,d]=INFO[r],camp={wolf:"狼人陣營",god:"好人・神職",vil:"好人・平民"}[c],me=S.room.players[uid]||{},
+  mates=Object.entries(S.wolf||{}).map(([u,s])=>`${s} ${esc((S.room.players[u]||{}).n||"")}`).join("、");
+ app.innerHTML=`<h1>你的身分</h1>${S.hide?'<div class="card big"><div class="role">🙈</div><p class="sub">身分已隱藏</p></div>':`<div class="card big"><span class="camp bg-${c}">${camp}</span><div class="role ${c}">${r}</div><p class="desc">${d}</p></div>`}
+ <button class="ghost" id="hd">${S.hide?"顯示身分":"隱藏身分"}</button>
+ ${S.isWolf?(st=="chat"?`<div class="card"><div class="rowb"><b>🐺 狼人頻道</b><span id="ct" class="wolf"></span></div><p class="sub" style="text-align:left">同伴：${mates}</p><div class="cm" id="cm"></div><div style="display:flex;gap:8px"><input id="ci" maxlength="100" placeholder="輸入戰術…"><button class="snd" id="cs">送出</button></div></div>`:'<div class="card"><p class="sub">⏱ 討論時間已結束</p></div>'):""}`;
+ dbl($("hd"),()=>{S.hide=!S.hide;render()});
+ if($("ci")){const send=()=>{const i=$("ci"),m=i.value.trim();if(!m)return;i.value="";push(ref(db,"chat/"+S.code),{u:uid,s:(S.wolf||{})[uid]||0,n:me.n||"",m})};
+  $("cs").onclick=send;$("ci").onkeydown=e=>{if(e.key=="Enter")send()}}
+ drawChat()}
+function drawChat(){const e=$("cm");if(!e)return;e.innerHTML=S.chat.map(m=>`<p><b class="wolf">${m.s} ${esc(m.n)}</b>　${esc(m.m)}</p>`).join("");e.scrollTop=e.scrollHeight}
+setInterval(()=>{const r=S.room;if(!r||!r.started)return;const st=stage();if(st!==S.stage)return render();
+ const a=$("cnt"),b=$("ct");if(a)a.textContent=Math.max(1,Math.ceil((r.revealAt-now())/1000));
+ if(b)b.textContent=st=="chat"?Math.max(0,Math.ceil((r.chatEnd-now())/1000))+" 秒":"已結束"},250);
+boot();
+</script>
+</body>
+</html>
