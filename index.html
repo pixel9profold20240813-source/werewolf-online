@@ -78,8 +78,8 @@ function chips(list){const m={};list.forEach(r=>m[r]=(m[r]||0)+1);
 function dbl(b,fn){const t=b.textContent;let on=false,tm;b.onclick=()=>{if(on){clearTimeout(tm);fn()}else{on=true;b.textContent="再點一次確認";b.classList.add("armed");tm=setTimeout(()=>{on=false;b.textContent=t;b.classList.remove("armed")},2500)}}}
 const on=q=>{unsub.push(q)},g=q=>{gun.push(q)};
 function unsubAll(){unsub.forEach(f=>f());unsub=[];stopGame()}
-function stopGame(){gun.forEach(f=>f());gun=[];Object.assign(S,{roles:null,myRole:null,wolf:null,chat:[],isWolf:false,wl:0,show:false,hide:false})}
-function stage(){const r=S.room;if(!r||!r.started)return"lobby";const t=now();return t<r.revealAt?"count":t<r.chatEnd?"chat":"after"}
+function stopGame(){gun.forEach(f=>f());gun=[];Object.assign(S,{roles:null,myRole:null,wolf:null,chat:[],isWolf:false,wl:0,show:false,hide:false,chatActive:false})}
+function stage(){const r=S.room;if(!r||!r.started)return"lobby";return now()<r.revealAt?"count":"game"}
 
 async function boot(){
  const cfg=window.FIREBASE_CONFIG;
@@ -125,7 +125,7 @@ function startListen(){stopGame();const c=S.code;
   g(onValue(ref(db,`wolf/${c}/${uid}`),s=>{S.isWolf=s.exists();if(S.isWolf)listenWolf();render()}))}}
 function listenWolf(){if(S.wl)return;S.wl=1;const c=S.code;
  g(onValue(ref(db,"wolf/"+c),s=>{S.wolf=s.val();render()}));
- g(onChildAdded(ref(db,"chat/"+c),s=>{S.chat.push(s.val());drawChat()}))}
+ g(onValue(ref(db,"chat/"+c),s=>{S.chat=s.val()?Object.values(s.val()):[];drawChat()}))}
 async function exit(){const c=S.code,h=isHost(),st=S.room&&S.room.started;unsubAll();localStorage.removeItem("ww2_room");
  try{if(h)await update(ref(db),{["rooms/"+c]:null,["roles/"+c]:null,["wolf/"+c]:null,["chat/"+c]:null});
   else if(!st)await remove(ref(db,`rooms/${c}/players/${uid}`))}catch(e){}
@@ -148,18 +148,24 @@ function hostLobby(){const p=pl(),n=p.length;
  document.querySelectorAll("[data-r]").forEach(x=>x.onclick=()=>{const k=x.dataset.r;S.custom[k]=Math.max(0,Math.min(n,(S.custom[k]||0)+Number(x.dataset.d)));render()});
  const rs=$("rs");if(rs)rs.onclick=()=>{S.custom=defCounts(n);S.cn=n;render()}}
 async function start(){const c=S.code,p=pl(),ids=p.map(x=>x[0]),roles=deal(ids),rv=now()+3500,u={};
- u["rooms/"+c+"/revealAt"]=rv;u["rooms/"+c+"/chatEnd"]=rv+30000;u["rooms/"+c+"/started"]=true;
+ u["rooms/"+c+"/revealAt"]=rv;u["rooms/"+c+"/chatStart"]=null;u["rooms/"+c+"/chatEnd"]=null;u["rooms/"+c+"/started"]=true;
  ids.forEach((id,i)=>{u[`roles/${c}/${id}`]=roles[i];if(INFO[roles[i]][0]=="wolf")u[`wolf/${c}/${id}`]=i+1});
  try{await update(ref(db),u)}catch(e){alert("開始失敗："+e.message)}}
 async function again(){const c=S.code;
- await update(ref(db),{["roles/"+c]:null,["wolf/"+c]:null,["chat/"+c]:null,[`rooms/${c}/started`]:null,[`rooms/${c}/revealAt`]:null,[`rooms/${c}/chatEnd`]:null})}
-function hostGame(){const p=pl(),R=S.roles||{};
+ await update(ref(db),{["roles/"+c]:null,["wolf/"+c]:null,["chat/"+c]:null,[`rooms/${c}/started`]:null,[`rooms/${c}/revealAt`]:null,[`rooms/${c}/chatStart`]:null,[`rooms/${c}/chatEnd`]:null})}
+async function openWolfChat(){const r=S.room;if(!r||!isHost()||!r.started||now()<r.revealAt)return;
+ if(r.chatEnd&&now()<r.chatEnd)return;
+ const t=now(),c=S.code;
+ try{await update(ref(db),{[`rooms/${c}/chatStart`]:t,[`rooms/${c}/chatEnd`]:t+30000,[`chat/${c}`]:null})}
+ catch(e){alert("開啟狼人聊天室失敗："+e.message)}}
+function hostGame(){const p=pl(),R=S.roles||{},opened=!!(S.room.chatEnd&&now()>=Number(S.room.chatStart||0)&&now()<S.room.chatEnd),ready=now()>=S.room.revealAt;
  app.innerHTML=`<h1>🎙️ 主持人區</h1><div class="card"><b>房間 ${S.code}</b>　${p.length} 人${chips(p.map(([u])=>R[u]).filter(Boolean))}</div>
  <button id="tg" class="${S.show?"ghost":""}">${S.show?"隱藏所有身分":"顯示所有身分"}</button>
  <div class="card ${S.show?"":"hide"}">${p.map(([u,v],i)=>`<div class="row"><span>${i+1} ${esc(v.n)}</span><b class="${INFO[R[u]||"村民"][0]}">${R[u]||"…"}</b></div>`).join("")}</div>
- <div class="card"><div class="rowb"><b>🐺 狼人頻道（只讀）</b><span id="ct" class="wolf"></span></div><div class="cm" id="cm"></div></div>
+ <div class="card"><div class="rowb"><b>🐺 狼人頻道（只讀）</b><span id="ct" class="wolf">${opened?Math.max(0,Math.ceil((S.room.chatEnd-now())/1000))+" 秒":ready?(S.room.chatEnd?"已結束":"尚未開啟"):"等待身分揭曉"}</span></div><p class="sub" style="text-align:left">每次夜晚由主持人手動開啟，開啟後限時 30 秒。</p><div class="cm" id="cm"></div></div>
+ <button id="wc" ${!ready||opened?"disabled":""}>${opened?"狼人聊天室開放中":ready?"開啟狼人聊天室（30 秒）":"等待身分揭曉"}</button>
  <button class="ghost" id="rp">再玩一局</button><button class="ghost" id="lv">關閉房間</button>`;
- dbl($("tg"),()=>{S.show=!S.show;render()});dbl($("rp"),again);dbl($("lv"),exit);drawChat()}
+ dbl($("tg"),()=>{S.show=!S.show;render()});$("wc").onclick=openWolfChat;dbl($("rp"),again);dbl($("lv"),exit);drawChat()}
 function playerLobby(){const p=pl();
  app.innerHTML=`<h1>🚪 已加入房間</h1><div class="card big"><p class="sub">房間代碼</p><div class="num">${S.code}</div></div>
  <div class="card"><b>玩家 ${p.length}</b><div class="chips">${p.map(([u,v],i)=>`<span class="chip ${u==uid?"vil":""}">${i+1} ${esc(v.n)}</span>`).join("")}</div></div>
@@ -168,18 +174,21 @@ function playerGame(st){
  if(st=="count"){app.innerHTML=`<div class="card big"><p class="sub">身分將在</p><div class="num" id="cnt">3</div><p class="sub">秒後揭曉，請確認只有你看得到螢幕</p></div>`;return}
  const r=S.myRole;if(!r){app.innerHTML='<p class="sub">讀取身分中…</p>';return}
  const[c,d]=INFO[r],camp={wolf:"狼人陣營",god:"好人・神職",vil:"好人・平民"}[c],me=S.room.players[uid]||{},
-  mates=Object.entries(S.wolf||{}).map(([u,s])=>`${s} ${esc((S.room.players[u]||{}).n||"")}`).join("、");
+  mates=Object.entries(S.wolf||{}).map(([u,s])=>`${s} ${esc((S.room.players[u]||{}).n||"")}`).join("、"),
+  opened=!!(S.room.chatEnd&&now()>=Number(S.room.chatStart||0)&&now()<S.room.chatEnd);
  app.innerHTML=`<h1>你的身分</h1>${S.hide?'<div class="card big"><div class="role">🙈</div><p class="sub">身分已隱藏</p></div>':`<div class="card big"><span class="camp bg-${c}">${camp}</span><div class="role ${c}">${r}</div><p class="desc">${d}</p></div>`}
  <button class="ghost" id="hd">${S.hide?"顯示身分":"隱藏身分"}</button>
- ${S.isWolf?(st=="chat"?`<div class="card"><div class="rowb"><b>🐺 狼人頻道</b><span id="ct" class="wolf"></span></div><p class="sub" style="text-align:left">同伴：${mates}</p><div class="cm" id="cm"></div><div style="display:flex;gap:8px"><input id="ci" maxlength="100" placeholder="輸入戰術…"><button class="snd" id="cs">送出</button></div></div>`:'<div class="card"><p class="sub">⏱ 討論時間已結束</p></div>'):""}`;
+ ${S.isWolf?(opened?`<div class="card"><div class="rowb"><b>🐺 狼人頻道</b><span id="ct" class="wolf"></span></div><p class="sub" style="text-align:left">同伴：${mates}</p><div class="cm" id="cm"></div><div style="display:flex;gap:8px"><input id="ci" maxlength="100" placeholder="輸入戰術…"><button class="snd" id="cs">送出</button></div></div>`:'<div class="card"><p class="sub">🐺 狼人聊天室尚未開放，請等待主持人開啟。</p></div>'):""}`;
  dbl($("hd"),()=>{S.hide=!S.hide;render()});
- if($("ci")){const send=()=>{const i=$("ci"),m=i.value.trim();if(!m)return;i.value="";push(ref(db,"chat/"+S.code),{u:uid,s:(S.wolf||{})[uid]||0,n:me.n||"",m})};
+ if($("ci")){const send=()=>{const i=$("ci"),m=i.value.trim();if(!m||!opened)return;i.value="";push(ref(db,"chat/"+S.code),{u:uid,s:(S.wolf||{})[uid]||0,n:me.n||"",m})};
   $("cs").onclick=send;$("ci").onkeydown=e=>{if(e.key=="Enter")send()}}
  drawChat()}
 function drawChat(){const e=$("cm");if(!e)return;e.innerHTML=S.chat.map(m=>`<p><b class="wolf">${m.s} ${esc(m.n)}</b>　${esc(m.m)}</p>`).join("");e.scrollTop=e.scrollHeight}
 setInterval(()=>{const r=S.room;if(!r||!r.started)return;const st=stage();if(st!==S.stage)return render();
+ const opened=!!(r.chatEnd&&now()>=Number(r.chatStart||0)&&now()<r.chatEnd);
+ if(opened!==S.chatActive){S.chatActive=opened;render();return}
  const a=$("cnt"),b=$("ct");if(a)a.textContent=Math.max(1,Math.ceil((r.revealAt-now())/1000));
- if(b)b.textContent=st=="chat"?Math.max(0,Math.ceil((r.chatEnd-now())/1000))+" 秒":"已結束"},250);
+ if(b)b.textContent=opened?Math.max(0,Math.ceil((r.chatEnd-now())/1000))+" 秒":(r.chatEnd?"已結束":"尚未開啟")},250);
 boot();
 </script>
 </body>
