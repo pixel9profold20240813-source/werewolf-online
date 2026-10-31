@@ -54,9 +54,9 @@ const INFO={
 "白痴":["god","被票出局時可翻牌免死，但之後失去投票權。"],
 "騎士":["god","白天可翻牌決鬥一名玩家：對方是狼則其出局，否則騎士出局。"],
 "守墓人":["god","每晚得知前一天被投票出局者是好人或狼人。"],
-"惡靈騎士":["god","免疫夜晚傷害。夜晚若被狼人襲擊或被毒，反傷使襲擊者（狼人／女巫）次日出局；被投票出局則正常死亡。"],
+"惡靈騎士":["wolf","狼人陣營。夜間免疫傷害，且能反傷預言家與女巫；無法自爆。詳細判定依你們的板子。"],
 "村民":["vil","沒有特殊能力，靠發言與投票找出狼人。"]};
-const GODS=["預言家","女巫","獵人","守衛","白痴","騎士","守墓人","惡靈騎士"],ALL=["狼人","狼王","白狼王",...GODS,"村民"];
+const GODS=["預言家","女巫","獵人","守衛","白痴","騎士","守墓人"],ALL=["狼人","狼王","白狼王","惡靈騎士",...GODS,"村民"];
 let db,uid,off0=0,unsub=[],gun=[];
 let S={code:null,room:null,roles:null,myRole:null,wolf:null,chat:[],isWolf:false,wl:0,custom:null,cn:0,adv:false,hide:false,show:false,stage:""};
 const now=()=>Date.now()+off0,isHost=()=>S.room&&S.room.host===uid;
