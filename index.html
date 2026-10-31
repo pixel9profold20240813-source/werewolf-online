@@ -99,10 +99,11 @@ async function boot(){
   const c=localStorage.getItem("ww2_room");c?enter(c):home()}
  catch(e){app.innerHTML=`<h1>連線失敗</h1><div class="card"><p class="sub">${esc(e.message)}</p></div>`}}
 function home(msg){unsubAll();S.code=null;S.room=null;S.custom=null;S.adv=false;S.stage="";
- app.innerHTML=`<h1>🐺 線上狼人殺</h1><p class="sub">${msg||"創建或加入房間"}</p>
- <div class="card"><input id="nm" placeholder="你的暱稱" maxlength="8" value="${esc(localStorage.getItem("ww2_n")||"")}"></div>
- <button id="mk">創建房間（我是主持人）</button>
- <div class="card"><input id="cd" placeholder="房間代碼" inputmode="numeric" maxlength="5"><button id="jn" style="margin-top:12px">加入房間</button></div>`;
+ app.innerHTML=`<h1>🐺 線上狼人殺</h1><p class="sub">${msg||"輸入暱稱，然後加入或創建房間"}</p>
+ <div class="card"><b>① 你的暱稱</b><input id="nm" placeholder="例如：小明" maxlength="8" style="margin-top:10px" value="${esc(localStorage.getItem("ww2_n")||"")}"></div>
+ <div class="card"><b>② 加入房間</b><p class="sub" style="text-align:left;margin-top:4px">輸入主持人給你的 5 位數代碼</p><input id="cd" placeholder="房間代碼" inputmode="numeric" maxlength="5" style="margin-top:10px"><button id="jn" style="margin-top:12px">加入房間</button></div>
+ <p class="sub">— 或者 —</p>
+ <div class="card"><b>③ 創建房間</b><p class="sub" style="text-align:left;margin-top:4px">你當主持人，把代碼分享給朋友</p><button class="ghost" id="mk" style="margin-top:12px">創建房間（我是主持人）</button></div>`;
  $("mk").onclick=create;$("jn").onclick=join}
 function nick(){const v=$("nm").value.trim();if(!v){alert("請先輸入暱稱");return""}localStorage.setItem("ww2_n",v);return v}
 async function create(){const name=nick();if(!name)return;
