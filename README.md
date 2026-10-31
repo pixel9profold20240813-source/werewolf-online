@@ -14,3 +14,6 @@
 編輯 `config.js` 貼上 Firebase Web App 的 firebaseConfig，並把 `database.rules.json` 的內容發布到 Firebase Realtime Database 規則。注意：更新 GitHub 上的規則檔不會自動更新 Firebase Console 中實際生效的規則。
 
 網站使用 Firebase Authentication 匿名登入及 Realtime Database。
+
+## 狼人聊天室流程（更新）
+主持人每晚可按「開啟狼人聊天室」：所有人同步倒數 3 秒 → 狼人聊天室開放 30 秒（畫面顯示剩餘秒數與進度條）→ 自動關閉，可再次開啟。規則更新後需在 Firebase Console 重新發布 `database.rules.json`。

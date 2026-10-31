@@ -19,7 +19,7 @@
       ".read": "auth != null && (root.child('wolf/'+$code+'/'+auth.uid).exists() || root.child('rooms/'+$code+'/host').val() === auth.uid)",
       ".write": "auth != null && root.child('rooms/'+$code+'/host').val() === auth.uid",
       "$m": {
-        ".write": "auth != null && root.child('wolf/'+$code+'/'+auth.uid).exists() && now >= root.child('rooms/'+$code+'/chatStart').val() && now <= root.child('rooms/'+$code+'/chatEnd').val()",
+        ".write": "auth != null && root.child('wolf/'+$code+'/'+auth.uid).exists() && now >= root.child('rooms/'+$code+'/chatStart').val() - 1000 && now <= root.child('rooms/'+$code+'/chatEnd').val()",
         ".validate": "newData.child('u').val() === auth.uid && newData.child('m').isString() && newData.child('m').val().length > 0 && newData.child('m').val().length <= 100"
       }
     }}
